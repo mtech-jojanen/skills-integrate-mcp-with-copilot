@@ -2,7 +2,29 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitiesList = document.getElementById("activities-list");
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
+  const loginForm = document.getElementById("login-form");
+  const loginToggle = document.getElementById("login-toggle");
+  const loginStatus = document.getElementById("login-status");
   const messageDiv = document.getElementById("message");
+  let credentials = null;
+
+  function showMessage(text, type) {
+    messageDiv.textContent = text;
+    messageDiv.className = type;
+    messageDiv.classList.remove("hidden");
+  }
+
+  function authenticatedHeaders() {
+    return credentials ? { Authorization: `Basic ${btoa(credentials)}` } : {};
+  }
+
+  function clearLogin() {
+    credentials = null;
+    loginStatus.textContent = "Student view";
+    loginToggle.textContent = "Teacher login";
+    loginForm.classList.add("hidden");
+    signupForm.classList.add("hidden");
+  }
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -80,6 +102,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/unregister?email=${encodeURIComponent(email)}`,
         {
           method: "DELETE",
+          headers: authenticatedHeaders(),
         }
       );
 
@@ -92,8 +115,10 @@ document.addEventListener("DOMContentLoaded", () => {
         // Refresh activities list to show updated participants
         fetchActivities();
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.className = "error";
+        if (response.status === 401) {
+          clearLogin();
+        }
+        showMessage(result.detail || "An error occurred", "error");
       }
 
       messageDiv.classList.remove("hidden");
@@ -103,12 +128,49 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.classList.add("hidden");
       }, 5000);
     } catch (error) {
-      messageDiv.textContent = "Failed to unregister. Please try again.";
-      messageDiv.className = "error";
-      messageDiv.classList.remove("hidden");
+      showMessage("Failed to unregister. Please try again.", "error");
       console.error("Error unregistering:", error);
     }
   }
+
+  loginToggle.addEventListener("click", () => {
+    if (credentials) {
+      clearLogin();
+      return;
+    }
+
+    loginForm.classList.toggle("hidden");
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+    const attemptedCredentials = `${username}:${password}`;
+
+    try {
+      const response = await fetch("/auth/login", {
+        headers: { Authorization: `Basic ${btoa(attemptedCredentials)}` },
+      });
+      const result = await response.json();
+
+      if (!response.ok) {
+        showMessage(result.detail || "Login failed", "error");
+        return;
+      }
+
+      credentials = attemptedCredentials;
+      loginStatus.textContent = `Teacher: ${username}`;
+      loginToggle.textContent = "Log out";
+      loginForm.classList.add("hidden");
+      signupForm.classList.remove("hidden");
+      loginForm.reset();
+      showMessage("Teacher login successful", "success");
+    } catch (error) {
+      showMessage("Failed to log in. Please try again.", "error");
+      console.error("Error logging in:", error);
+    }
+  });
 
   // Handle form submission
   signupForm.addEventListener("submit", async (event) => {
@@ -124,6 +186,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/signup?email=${encodeURIComponent(email)}`,
         {
           method: "POST",
+          headers: authenticatedHeaders(),
         }
       );
 
@@ -137,8 +200,10 @@ document.addEventListener("DOMContentLoaded", () => {
         // Refresh activities list to show updated participants
         fetchActivities();
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.className = "error";
+        if (response.status === 401) {
+          clearLogin();
+        }
+        showMessage(result.detail || "An error occurred", "error");
       }
 
       messageDiv.classList.remove("hidden");
@@ -148,13 +213,12 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.classList.add("hidden");
       }, 5000);
     } catch (error) {
-      messageDiv.textContent = "Failed to sign up. Please try again.";
-      messageDiv.className = "error";
-      messageDiv.classList.remove("hidden");
+      showMessage("Failed to sign up. Please try again.", "error");
       console.error("Error signing up:", error);
     }
   });
 
   // Initialize app
+  signupForm.classList.add("hidden");
   fetchActivities();
 });
